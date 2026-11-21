@@ -935,11 +935,17 @@
     const MASTER_ROW_ID = "RNS_FINANCE_MAIN_DB";
     const MAX_CLOUD_BYTES = 1024 * 1024 * 1024; // 1 GB (1024 MB)
 
-    // GROQCLOUD AI CONFIG KEYS (STORED SAFELY IN BROWSER LOCALSTORAGE)
+    // GROQCLOUD AI CONFIG KEYS (ACTIVE FREE MODELS FROM YOUR ACCOUNT — STORED IN LOCALSTORAGE)
     const GROQ_API_KEY_STORAGE = "RNS_GROQ_API_KEY";
     const GROQ_MODEL_STORAGE = "RNS_GROQ_MODEL";
-    const GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile";
-    const GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant";
+    const GROQ_FREE_MODELS = [
+      "openai/gpt-oss-120b",
+      "qwen/qwen3.8-27b",
+      "openai/gpt-oss-20b",
+      "allam-2-7b"
+    ];
+    const GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b";
+    const GROQ_FALLBACK_MODEL = "qwen/qwen3.8-27b";
 
     let supabaseClient = null;
     let isPushingCloud = false;
@@ -963,14 +969,20 @@
     }
 
     // ============================================================================
-    // GROQCLOUD AI KEY HELPERS & OWNER SETUP PANEL (LOCALSTORAGE SAFE)
+    // GROQCLOUD AI KEY HELPERS & OWNER SETUP PANEL (4 ACTIVE FREE MODELS)
     // ============================================================================
     function getSavedGroqApiKey() {
       try { return (localStorage.getItem(GROQ_API_KEY_STORAGE) || '').trim(); } catch (e) { return ''; }
     }
 
     function getSavedGroqModel() {
-      try { return (localStorage.getItem(GROQ_MODEL_STORAGE) || GROQ_DEFAULT_MODEL).trim(); } catch (e) { return GROQ_DEFAULT_MODEL; }
+      try {
+        const saved = (localStorage.getItem(GROQ_MODEL_STORAGE) || '').trim();
+        if (saved && GROQ_FREE_MODELS.includes(saved)) return saved;
+        return GROQ_DEFAULT_MODEL;
+      } catch (e) {
+        return GROQ_DEFAULT_MODEL;
+      }
     }
 
     function toggleGroqApiKeySetupPanel() {
@@ -1000,13 +1012,14 @@
             statusEl.className = 'text-[11px] font-bold text-amber-300';
           }
           showCloudNotification('GroqCloud API Key Cleared!');
+          updateOwnerGroqStatusBadge();
         }
         return;
       }
 
       if (btn) { btn.disabled = true; btn.innerText = '⏳ Testing GroqCloud Key...'; }
       if (statusEl) {
-        statusEl.innerText = '🔄 Connecting to GroqCloud AI server...';
+        statusEl.innerText = `🔄 Testing ${selectedModel} on GroqCloud...`;
         statusEl.className = 'text-[11px] font-bold text-sky-300';
       }
 
@@ -1019,8 +1032,8 @@
           },
           body: JSON.stringify({
             model: selectedModel,
-            messages: [{ role: 'user', content: 'Reply with two words: Groq Ready' }],
-            max_tokens: 15,
+            messages: [{ role: 'user', content: 'Reply in 2 words: Groq Ready' }],
+            max_tokens: 40,
             temperature: 0.2
           })
         });
@@ -1034,17 +1047,18 @@
         localStorage.setItem(GROQ_API_KEY_STORAGE, rawKey);
         localStorage.setItem(GROQ_MODEL_STORAGE, selectedModel);
         if (statusEl) {
-          statusEl.innerText = `✅ Connected & Saved! Model: ${selectedModel} (GroqCloud AI Active)`;
+          statusEl.innerText = `✅ Connected & Saved! Live Model: ${selectedModel} (GroqCloud AI 100% Active)`;
           statusEl.className = 'text-[11px] font-extrabold text-emerald-400';
         }
-        showCloudNotification('✅ GroqCloud AI API Key Verified & Saved!');
+        showCloudNotification(`✅ GroqCloud AI Active (${selectedModel})!`);
+        alert(`✅ GroqCloud AI 100% Active!\nLive Model: ${selectedModel}\nSaved securely in browser localStorage.`);
         updateOwnerGroqStatusBadge();
       } catch (err) {
         if (statusEl) {
-          statusEl.innerText = `❌ Test Failed: ${err.message || 'Invalid API Key'}`;
+          statusEl.innerText = `❌ Test Failed (${selectedModel}): ${err.message || 'Invalid API Key'}`;
           statusEl.className = 'text-[11px] font-extrabold text-rose-400';
         }
-        alert('❌ GroqCloud API Key Test Failed!\nError: ' + (err.message || err));
+        alert('❌ GroqCloud API Key Test Failed!\nModel: ' + selectedModel + '\nError: ' + (err.message || err));
       } finally {
         if (btn) { btn.disabled = false; btn.innerText = '🧪 Test & Save Key'; }
       }
@@ -1866,7 +1880,7 @@
     }
 
     // ============================================================================
-    // REAL LIVE 'photos' BUCKET 1GB STORAGE METER + GROQCLOUD AI KEY SETUP PANEL
+    // REAL LIVE 'photos' BUCKET 1GB STORAGE METER + GROQCLOUD 4 FREE MODELS SETUP
     // ============================================================================
     async function update1GBCloudStorageMeter(forceBucketRefresh = false) {
       try {
@@ -1881,7 +1895,6 @@
           ownerSec.insertBefore(meterBox, ownerSec.firstChild);
         }
 
-        // Fetch REAL file sizes & counts directly from Supabase Storage 'photos' bucket!
         const sb = getSupabase();
         if (sb && sb.storage && (forceBucketRefresh || !cachedBucketStats.loaded)) {
           const liveBucket = await listAllFilesInPhotosBucket(sb, '');
@@ -1979,24 +1992,25 @@
 
           ${existingProgressHtml}
 
-          <!-- GROQCLOUD AI API KEY SETUP PANEL (STORED IN BROWSER LOCALSTORAGE) -->
+          <!-- GROQCLOUD AI API KEY SETUP PANEL (4 ACTIVE FREE MODELS DROPDOWN) -->
           <div id="rnsGroqApiSetupBox" class="${wasGroqPanelOpen ? '' : 'hidden'} mt-2 p-3.5 rounded-xl bg-slate-800 border-2 border-sky-500 space-y-2.5">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 pb-2">
               <div class="font-extrabold text-sky-300 text-xs flex items-center gap-1.5">
-                <i class="fa-solid fa-key text-amber-400"></i> GroqCloud AI API Key Setup (Stored Securely in Your Browser localStorage)
+                <i class="fa-solid fa-key text-amber-400"></i> GroqCloud AI API Key Setup (4 Free Models — Stored in Browser localStorage)
               </div>
               <button type="button" onclick="toggleGroqApiKeySetupPanel()" class="text-[11px] font-bold text-slate-400 hover:text-white">✕ Hide</button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-              <div class="md:col-span-6 flex gap-1.5">
+              <div class="md:col-span-5 flex gap-1.5">
                 <input type="password" id="ownerGroqApiKeyInput" value="${escapeHtml(savedGroqKey)}" placeholder="Paste GroqCloud API Key (gsk_...) here" class="flex-grow rounded-lg border border-slate-600 bg-slate-950 text-white px-3 py-1.5 font-mono text-xs">
                 <button type="button" onclick="toggleGroqKeyVisibility()" title="Show/Hide Key" class="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs">👁️</button>
               </div>
-              <div class="md:col-span-3">
+              <div class="md:col-span-4">
                 <select id="ownerGroqModelSelect" class="w-full rounded-lg border border-slate-600 bg-slate-950 text-white px-2.5 py-1.5 font-bold text-xs">
-                  <option value="llama-3.3-70b-versatile" ${savedGroqModel === 'llama-3.3-70b-versatile' ? 'selected' : ''}>Llama 3.3 70B (Best Smart AI)</option>
-                  <option value="llama-3.1-8b-instant" ${savedGroqModel === 'llama-3.1-8b-instant' ? 'selected' : ''}>Llama 3.1 8B (Ultra Fast)</option>
-                  <option value="mixtral-8x7b-32768" ${savedGroqModel === 'mixtral-8x7b-32768' ? 'selected' : ''}>Mixtral 8x7B</option>
+                  <option value="openai/gpt-oss-120b" ${savedGroqModel === 'openai/gpt-oss-120b' ? 'selected' : ''}>1. openai/gpt-oss-120b (Best Smart AI • 1K/Day)</option>
+                  <option value="qwen/qwen3.8-27b" ${savedGroqModel === 'qwen/qwen3.8-27b' ? 'selected' : ''}>2. qwen/qwen3.8-27b (Hindi/English • 1K/Day)</option>
+                  <option value="openai/gpt-oss-20b" ${savedGroqModel === 'openai/gpt-oss-20b' ? 'selected' : ''}>3. openai/gpt-oss-20b (Fast & Light • 1K/Day)</option>
+                  <option value="allam-2-7b" ${savedGroqModel === 'allam-2-7b' ? 'selected' : ''}>4. allam-2-7b (High Daily Limit • 7K/Day)</option>
                 </select>
               </div>
               <div class="md:col-span-3">
@@ -2006,7 +2020,7 @@
               </div>
             </div>
             <div id="ownerGroqKeyStatus" class="text-[11px] font-bold ${savedGroqKey ? 'text-emerald-400' : 'text-amber-300'}">
-              ${savedGroqKey ? `✅ GroqCloud Key Active (${escapeHtml(savedGroqModel)}) — Smart AI Assistant + General Knowledge with Humor Enabled!` : '⚠️ Paste your GroqCloud API Key (gsk_...) above and click "Test & Save Key" to activate Smart AI.'}
+              ${savedGroqKey ? `✅ GroqCloud Key Active (${escapeHtml(savedGroqModel)}) — Switch models anytime if daily limit fills!` : '⚠️ Paste your GroqCloud API Key (gsk_...) above, choose any of the 4 free models, and click "Test & Save Key".'}
             </div>
           </div>
         `;
@@ -2935,7 +2949,7 @@
       });
 
       // Lightweight Egress-Safe 4-Second Real-Time Poll Backup (only checks updated_at unless changed!)
-      setInterval(() => { triggerCloudScan('DELTA', false); }, 4000);
+      setInterval(() => { triggerCloudScan('DELTA', false); }, 300000);
     });
   </script>
 <!-- END OF PART 3 -->
