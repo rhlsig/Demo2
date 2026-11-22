@@ -9212,6 +9212,376 @@
       }, 300);
     });
   </script>
+  <!-- START OF PART 6C (TICKET STATUS + WA/SMS FIX + MOBILE SEARCH ON AI) -->
+  <script>
+    (function installRnsPart6CPatch() {
+      if (window._RNS_PART6C_INSTALLED) return;
+      window._RNS_PART6C_INSTALLED = true;
+
+      // ========================================================================
+      // 1. FIXED WHATSAPP & SMS REPLY GENERATOR FOR OWNER TICKETS (OPEN + RESOLVED)
+      // ========================================================================
+      window.sendTicketReplyNotification = function(ticketId, mode = 'wa') {
+        const db = getCloudData();
+        const t = (db.tickets || []).find(x => x.ticketId === ticketId);
+        if (!t) return alert('Ticket record not found!');
+
+        const apps = db.applications || [];
+        const matchedApp = (t.registrationNo && t.registrationNo !== 'N/A')
+          ? apps.find(a => a.orderId.toUpperCase() === String(t.registrationNo).toUpperCase())
+          : null;
+
+        const custName = t.customerName || (matchedApp ? matchedApp.name : 'Valued Customer');
+        const custMobile = t.customerMobile || (matchedApp ? matchedApp.mobile : '');
+        if (!custMobile) return alert('❌ No mobile number found for this ticket!');
+
+        const regPart = (t.registrationNo && t.registrationNo !== 'N/A')
+          ? ` (Registration No.: *${t.registrationNo}*)`
+          : '';
+        const isResolved = (t.status === 'Resolved');
+        const siteUrl = window.location.href.split('?')[0];
+
+        let msg = '';
+        if (isResolved) {
+          msg = `Dear ${custName},\n\n✅ *Good News!* Your Support Ticket *${t.ticketId}*${regPart} with *RNS FINANCE* has been *RESOLVED*.\n\n📌 *Reported Issue:* "${t.problem}"\n📊 *Ticket Status:* *Resolved ✔*\n\nYour concern has been successfully addressed by our team. If you still need any help, feel free to reply or reach us on our portal:\n${siteUrl}\n\nThank you for choosing RNS FINANCE!\n— Team RNS FINANCE`;
+        } else {
+          msg = `Dear ${custName},\n\nThis is an update regarding your Support Ticket *${t.ticketId}*${regPart} with *RNS FINANCE*.\n\n📌 *Your Complaint / Issue:* "${t.problem}"\n📊 *Current Status:* *Open (Under Active Review)*\n\nOur support team has received your complaint and is assisting you right now. Please share any additional details if required.\n\n— Team RNS FINANCE`;
+        }
+
+        dispatchWaOrSms(custMobile, msg, mode);
+      };
+
+      // ========================================================================
+      // 2. UPGRADED OWNER TICKETS VIEW (CLEAN ONCLICK — NO BROKEN QUOTES)
+      // ========================================================================
+      window.renderOwnerSupportTickets = function() {
+        ensureOwnerTicketsTabInjected();
+        const box = document.getElementById('ownerViewTickets');
+        if (!box) return;
+        const db = getCloudData();
+        const tickets = db.tickets || [];
+        const apps = db.applications || [];
+        const openCount = tickets.filter(t => t.status !== 'Resolved').length;
+        updateOwnerTicketBadge();
+
+        box.innerHTML = `
+          <div class="bg-white card-bg rounded-2xl p-5 border-2 border-rose-500 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+              <div>
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white">🎫 Customer Support Tickets (Live from AI Help Desk)</h3>
+                <p class="text-[11px] text-slate-500">Existing Customer & New User (Name + Mobile) tickets synced to Supabase. WhatsApp & SMS auto-adapt for Open / Resolved status.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-3 py-1 rounded-full bg-rose-100 text-rose-800 font-extrabold text-[11px] border border-rose-300">Open: ${openCount}</span>
+                <span class="px-3 py-1 rounded-full bg-slate-900 text-white font-extrabold text-[11px]">Total: ${tickets.length}</span>
+              </div>
+            </div>
+
+            ${tickets.length === 0 ? `
+              <div class="p-8 rounded-xl bg-slate-50 dark:bg-slate-800 border text-center text-slate-500 font-bold">
+                No support tickets raised yet. When a customer raises a ticket via AI Assistant, it will appear here instantly.
+              </div>
+            ` : `
+              <div class="space-y-3">
+                ${tickets.map((t) => {
+                  const isRes = (t.status === 'Resolved');
+                  const matchedApp = (t.registrationNo && t.registrationNo !== 'N/A')
+                    ? apps.find(a => a.orderId.toUpperCase() === String(t.registrationNo).toUpperCase())
+                    : null;
+                  const custName = t.customerName || (matchedApp ? matchedApp.name : '');
+                  const custMobile = t.customerMobile || (matchedApp ? matchedApp.mobile : '');
+                  const safeTktId = escapeHtml(t.ticketId);
+                  return `
+                    <div class="p-4 rounded-xl border-2 ${isRes ? 'border-emerald-400 bg-emerald-50/40' : 'border-rose-400 bg-rose-50/40'} dark:bg-slate-800 space-y-2.5">
+                      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono font-extrabold text-xs">${safeTktId}</span>
+                          <span class="px-2.5 py-0.5 rounded-full font-extrabold text-[10.5px] ${t.userType === 'Existing Customer' ? 'bg-indigo-100 text-indigo-900 border border-indigo-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}">${escapeHtml(t.userType || 'User')}</span>
+                          ${(t.registrationNo && t.registrationNo !== 'N/A') ? `<span class="px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono font-extrabold text-[11px]">Reg No.: ${escapeHtml(t.registrationNo)}</span>` : `<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[10px]">New User</span>`}
+                          ${custName ? `<span class="font-extrabold text-slate-900 dark:text-white">👤 ${escapeHtml(custName)}</span>` : ''}
+                          ${custMobile ? `<span class="px-2 py-0.5 rounded bg-sky-100 text-sky-900 font-mono font-extrabold text-[11px]">📞 +91 ${escapeHtml(custMobile)}</span>` : ''}
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-[10.5px] text-slate-500 font-semibold">🕒 ${escapeHtml(t.dateTime || '')}</span>
+                          <span class="px-2.5 py-0.5 rounded-full font-extrabold text-[10.5px] ${isRes ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}">${isRes ? '✔ Resolved' : '⏳ Open'}</span>
+                        </div>
+                      </div>
+
+                      <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                        <span class="text-[10px] font-extrabold text-slate-500 uppercase block mb-0.5">Customer Problem / Complaint:</span>
+                        <p class="text-xs font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">${escapeHtml(t.problem)}</p>
+                      </div>
+
+                      <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                        <div class="flex flex-wrap gap-1.5">
+                          ${custMobile ? `
+                            <a href="tel:+91${escapeHtml(String(custMobile).replace(/\D/g, '').slice(-10))}" class="px-3 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-[11px] shadow"><i class="fa-solid fa-phone"></i> Call</a>
+                            <button type="button" onclick="sendTicketReplyNotification('${safeTktId}', 'wa')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow"><i class="fa-brands fa-whatsapp"></i> ${isRes ? 'WhatsApp (Resolved)' : 'WhatsApp Reply'}</button>
+                            <button type="button" onclick="sendTicketReplyNotification('${safeTktId}', 'sms')" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] shadow"><i class="fa-solid fa-comment-sms"></i> ${isRes ? 'SMS (Resolved)' : 'SMS Reply'}</button>
+                          ` : `<span class="text-[10.5px] text-slate-500 font-semibold italic">No mobile number linked to this ticket.</span>`}
+                        </div>
+                        <div class="flex gap-1.5">
+                          <button type="button" onclick="toggleTicketStatus('${safeTktId}')" class="px-3 py-1.5 rounded-lg ${isRes ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-700 hover:bg-emerald-800'} text-white font-extrabold text-[11px] shadow">
+                            ${isRes ? '🔄 Re-open Ticket' : '✔ Mark Resolved'}
+                          </button>
+                          <button type="button" onclick="deleteSupportTicket('${safeTktId}')" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px]">
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>`;
+                }).join('')}
+              </div>`}
+          </div>`;
+      };
+
+      // ========================================================================
+      // 3. ENSURE EXISTING CUSTOMER ALSO PROVIDES MOBILE IF REG NO. NOT MATCHED
+      // ========================================================================
+      const origHandleAiTicketStepInput = window.handleAiTicketStepInput;
+      if (typeof origHandleAiTicketStepInput === 'function') {
+        window.handleAiTicketStepInput = async function(rawInput) {
+          if (aiTicketFlow && aiTicketFlow.active && aiTicketFlow.step === 'ASK_REG') {
+            const cleanReg = rawInput.trim().toUpperCase().replace(/\s+/g, '');
+            const matchedApp = (getCloudData().applications || []).find(a => a.orderId.toUpperCase() === cleanReg);
+            if (cleanReg.length >= 4 && !matchedApp) {
+              appendRnsAiMessage('user', rawInput.trim(), false);
+              aiTicketFlow.registrationNo = cleanReg;
+              aiTicketFlow.customerName = '';
+              aiTicketFlow.customerMobile = '';
+              aiTicketFlow.step = 'ASK_NEW_MOBILE';
+              renderRnsAiQuickChips();
+              return appendRnsAiMessage('bot', `
+                <div class="font-extrabold text-indigo-800 dark:text-indigo-300">✔ Registration No. <strong>${escapeHtml(cleanReg)}</strong> नोट कर लिया गया है।</div>
+                <div>ताकि हमारी टीम आपसे संपर्क कर सके, कृपया अपना <strong>10-अंकों का मोबाइल नंबर</strong> दर्ज करें:</div>
+              `, true);
+            }
+          }
+          return await origHandleAiTicketStepInput(rawInput);
+        };
+      }
+
+      // ========================================================================
+      // 4. HELPER: SYNC LATEST TICKETS & BUILD TICKET STATUS CARDS IN AI CHAT
+      // ========================================================================
+      async function fetchLatestTicketsSafe() {
+        const db = getCloudData();
+        let tickets = Array.isArray(db.tickets) ? [...db.tickets] : [];
+        try {
+          const remoteTkt = await downloadJsonBlobFromCloud(TICKETS_ROW_ID);
+          if (remoteTkt && Array.isArray(remoteTkt.tickets)) {
+            const deletedT = db.deletedTicketIds || [];
+            const tMap = new Map();
+            [...tickets, ...remoteTkt.tickets].forEach(t => {
+              if (!t || !t.ticketId || deletedT.includes(t.ticketId)) return;
+              const ex = tMap.get(t.ticketId);
+              if (!ex || (t.updatedAt || t.timestamp || 0) >= (ex.updatedAt || ex.timestamp || 0)) {
+                tMap.set(t.ticketId, t);
+              }
+            });
+            tickets = Array.from(tMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            db.tickets = tickets;
+            safePersistLocalDB(db, false);
+          }
+        } catch (e) {}
+        return tickets;
+      }
+
+      function buildAiTicketStatusCardsHtml(ticketList, headingText) {
+        return `
+          <div class="space-y-2">
+            <div class="font-extrabold text-indigo-900 dark:text-indigo-300 text-xs">${headingText}</div>
+            ${ticketList.map(t => {
+              const isRes = (t.status === 'Resolved');
+              return `
+                <div class="p-3 rounded-xl border-2 ${isRes ? 'border-emerald-500 bg-emerald-50/80' : 'border-amber-500 bg-amber-50/80'} dark:bg-slate-900 space-y-1.5 text-[11px]">
+                  <div class="flex items-center justify-between gap-2 border-b pb-1">
+                    <span class="px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono font-extrabold">${escapeHtml(t.ticketId)}</span>
+                    <span class="px-2.5 py-0.5 rounded-full font-extrabold text-[10px] ${isRes ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'}">${isRes ? '✅ Resolved (सुलझाया गया)' : '⏳ Open (जांच जारी है)'}</span>
+                  </div>
+                  ${t.customerName ? `<div>• <strong>Name:</strong> ${escapeHtml(t.customerName)} ${t.customerMobile ? `(+91 ${escapeHtml(t.customerMobile)})` : ''}</div>` : ''}
+                  ${(t.registrationNo && t.registrationNo !== 'N/A') ? `<div>• <strong>Registration No.:</strong> <span class="font-mono font-bold">${escapeHtml(t.registrationNo)}</span></div>` : ''}
+                  <div>• <strong>Complaint / Issue:</strong> ${escapeHtml(t.problem)}</div>
+                  <div class="text-[10px] text-slate-500">🕒 Registered On: ${escapeHtml(t.dateTime || '')}</div>
+                  <div class="text-[10.5px] font-bold ${isRes ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-900 dark:text-amber-300'}">
+                    ${isRes ? '🎉 आपकी इस शिकायत का समाधान (Resolved) कर दिया गया है।' : '📌 हमारी सपोर्ट टीम आपकी शिकायत पर काम कर रही है और जल्द ही आपसे संपर्क करेगी।'}
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>`;
+      }
+
+      // Helper: Switch active loan inside AI chat when multiple loans exist on a mobile number
+      window.switchAiToMatchedLoanByMobile = function(orderId) {
+        const db = getCloudData();
+        const app = (db.applications || []).find(a => a.orderId === orderId);
+        if (!app) return;
+        aiVerifiedOrderId = app.orderId;
+        const logoutBtn = document.getElementById('btnAiLogoutSession');
+        if (logoutBtn) logoutBtn.classList.remove('hidden');
+        const bannerTxt = document.getElementById('aiSessionBannerText');
+        if (bannerTxt) bannerTxt.innerHTML = `✅ Verified: <strong>${escapeHtml(app.name)} (${escapeHtml(app.orderId)})</strong>`;
+        renderRnsAiQuickChips();
+        answerVerifiedCustomerSpecificQuery(app, 'status', 'status', true);
+      };
+
+      // ========================================================================
+      // 5. UPGRADE AI ROUTER: TICKET STATUS LOOKUP + 10-DIGIT MOBILE SEARCH
+      // ========================================================================
+      const origProcessRnsAiQuery = window.processRnsAiQuery;
+      if (typeof origProcessRnsAiQuery === 'function') {
+        window.processRnsAiQuery = async function(rawQuery, shouldSpeak = true) {
+          const q = String(rawQuery || '').trim();
+          const lower = q.toLowerCase();
+          const upper = q.toUpperCase();
+
+          // Let active Ticket Flow or Loan Application Wizard handle input directly
+          if ((aiTicketFlow && aiTicketFlow.active) || (aiAppWizard && aiAppWizard.active)) {
+            return await origProcessRnsAiQuery(rawQuery, shouldSpeak);
+          }
+
+          // A. CHECK IF USER ENTERED A TICKET ID (e.g. #RNS-TKT-4821 / RNS-TKT-4821 / TKT-4821)
+          const tktMatch = upper.match(/#?(?:RNS-)?TKT-(\d{3,6})/);
+          if (tktMatch) {
+            appendRnsAiMessage('user', rawQuery, false);
+            const digits = tktMatch[1];
+            const tickets = await fetchLatestTicketsSafe();
+            const foundList = tickets.filter(t =>
+              String(t.ticketId || '').toUpperCase().includes('TKT-' + digits)
+            );
+            if (foundList.length > 0) {
+              appendRnsAiMessage('bot', buildAiTicketStatusCardsHtml(foundList, '🎫 आपके सपोर्ट टिकट का लाइव स्टेटस:'), shouldSpeak);
+            } else {
+              appendRnsAiMessage('bot', `
+                <div class="font-extrabold text-rose-700">❌ Ticket ID (#RNS-TKT-${escapeHtml(digits)}) का कोई रिकॉर्ड नहीं मिला।</div>
+                <div class="text-[11px]">कृपया सही Ticket ID या अपना <strong>10-अंकों का मोबाइल नंबर</strong> डालें, या नया टिकट दर्ज करें:</div>
+                <button type="button" onclick="startAiSupportTicketFlow()" class="w-full py-1.5 rounded-lg bg-rose-600 text-white font-extrabold mt-1">🎫 Raise New Support Ticket</button>
+              `, shouldSpeak);
+            }
+            return;
+          }
+
+          // B. CHECK IF USER ASKED FOR TICKET / COMPLAINT STATUS (WITHOUT ENTERING ID)
+          const mentionsTicketWord = /(ticket|टिकट|complaint|शिकायत|shikayat|complain)/i.test(lower);
+          const mentionsStatusWord = /(status|स्टेटस|check|चेक|track|ट्रैक|kya hua|क्या हुआ|update|अपडेट|show|दिखाओ|बताओ|batao)/i.test(lower);
+          const mentionsRaiseNew = /(raise|new|नया|नयी|darj|दर्ज|banana|बनाना|file|karna hai|करना है|करनी है)/i.test(lower);
+
+          if (mentionsTicketWord && mentionsStatusWord && !mentionsRaiseNew) {
+            appendRnsAiMessage('user', rawQuery, false);
+            const tickets = await fetchLatestTicketsSafe();
+            const db = getCloudData();
+            let myTickets = [];
+
+            if (aiVerifiedOrderId) {
+              const vApp = (db.applications || []).find(a => a.orderId === aiVerifiedOrderId);
+              const vMob = vApp ? String(vApp.mobile || '').replace(/\D/g, '').slice(-10) : '';
+              myTickets = tickets.filter(t =>
+                String(t.registrationNo || '').toUpperCase() === aiVerifiedOrderId.toUpperCase() ||
+                (vMob && String(t.customerMobile || '').replace(/\D/g, '').slice(-10) === vMob)
+              );
+            }
+
+            if (myTickets.length > 0) {
+              appendRnsAiMessage('bot', buildAiTicketStatusCardsHtml(myTickets, `🎫 आपके दर्ज सपोर्ट टिकट्स (${myTickets.length}):`), shouldSpeak);
+            } else {
+              appendRnsAiMessage('bot', `
+                <div class="font-extrabold text-indigo-900 dark:text-indigo-300">🎫 अपने टिकट / शिकायत का स्टेटस चेक करें:</div>
+                <div>कृपया अपना <strong>Ticket ID (जैसे #RNS-TKT-4821)</strong> या अपना <strong>10-अंकों का मोबाइल नंबर</strong> भेजें—मैं तुरंत उसका लाइव स्टेटस बता दूँगा।</div>
+                <button type="button" onclick="startAiSupportTicketFlow()" class="w-full py-1.5 rounded-lg bg-rose-600 text-white font-extrabold mt-1">🎫 नई शिकायत (New Ticket) दर्ज करें</button>
+              `, shouldSpeak);
+            }
+            return;
+          }
+
+          // C. CHECK IF USER ENTERED A 10-DIGIT MOBILE NUMBER ON AI (SEARCHES BOTH LOANS & TICKETS!)
+          const mobMatch = q.match(/(?:^|[^\d])(?:\+?91[\s-]?)?([6-9]\d{9})(?:$|[^\d])/);
+          if (mobMatch) {
+            const mob = mobMatch[1];
+            appendRnsAiMessage('user', rawQuery, false);
+
+            const db = getCloudData();
+            const apps = db.applications || [];
+            const matchedLoans = apps.filter(a => String(a.mobile || '').replace(/\D/g, '').slice(-10) === mob);
+            const tickets = await fetchLatestTicketsSafe();
+            const matchedTickets = tickets.filter(t =>
+              String(t.customerMobile || '').replace(/\D/g, '').slice(-10) === mob ||
+              matchedLoans.some(a => a.orderId.toUpperCase() === String(t.registrationNo || '').toUpperCase())
+            );
+
+            if (matchedLoans.length > 0) {
+              const primaryApp = matchedLoans[0];
+              aiVerifiedOrderId = primaryApp.orderId;
+              const logoutBtn = document.getElementById('btnAiLogoutSession');
+              if (logoutBtn) logoutBtn.classList.remove('hidden');
+              const bannerTxt = document.getElementById('aiSessionBannerText');
+              if (bannerTxt) bannerTxt.innerHTML = `✅ Verified: <strong>${escapeHtml(primaryApp.name)} (${escapeHtml(primaryApp.orderId)})</strong>`;
+              renderRnsAiQuickChips();
+
+              const stripped = lower.replace(/(?:\+?91[\s-]?)?[6-9]\d{9}/g, '').replace(/(mobile|number|mob|no\.?|ka|ki|ke|mera|meri|status|check|loan|batao|स्टेटस|लोन|बताओ|चेक)/g, '').trim();
+
+              if (mentionsTicketWord && matchedTickets.length > 0) {
+                appendRnsAiMessage('bot', buildAiTicketStatusCardsHtml(matchedTickets, `🎫 +91 ${escapeHtml(mob)} पर दर्ज सपोर्ट टिकट्स (${matchedTickets.length}):`), shouldSpeak);
+                return;
+              }
+
+              if (stripped.length >= 4) {
+                await answerVerifiedCustomerSpecificQuery(primaryApp, q, lower, shouldSpeak);
+                return;
+              }
+
+              const multiLoanPillsHtml = matchedLoans.length > 1
+                ? `<div class="space-y-1 pt-1 border-t border-slate-200 dark:border-slate-700">
+                     <div class="text-[10.5px] font-extrabold text-indigo-800 dark:text-indigo-300">📚 इस मोबाइल नंबर पर ${matchedLoans.length} लोन मिले हैं (किसी पर भी क्लिक करें):</div>
+                     <div class="flex flex-wrap gap-1.5">
+                       ${matchedLoans.map((a, idx) => `<button type="button" onclick="switchAiToMatchedLoanByMobile('${escapeHtml(a.orderId)}')" class="px-2.5 py-1 rounded-lg ${idx === 0 ? 'bg-indigo-700 text-white' : 'bg-indigo-100 text-indigo-950 border border-indigo-400'} font-extrabold text-[10.5px]">${escapeHtml(a.orderId)} — ₹${a.status === 'Rejected' ? 0 : a.amount} (${escapeHtml(a.status)})</button>`).join('')}
+                     </div>
+                   </div>`
+                : '';
+
+              const ticketSectionHtml = matchedTickets.length > 0
+                ? `<div class="pt-2 border-t border-slate-200 dark:border-slate-700">${buildAiTicketStatusCardsHtml(matchedTickets, `🎫 इस नंबर के सपोर्ट टिकट्स (${matchedTickets.length}):`)}</div>`
+                : '';
+
+              const isRej = primaryApp.status === 'Rejected';
+              appendRnsAiMessage('bot', `
+                <div class="font-extrabold text-emerald-800 dark:text-emerald-400">✅ नमस्ते ${escapeHtml(primaryApp.name)} जी! (+91 ${escapeHtml(mob)})</div>
+                <div>• <strong>Registration No.:</strong> <span class="font-mono font-extrabold">${escapeHtml(primaryApp.orderId)}</span> (${escapeHtml(primaryApp.loanType)})<br>
+                • <strong>Current Status:</strong> <span class="px-2 py-0.5 rounded ${isRej ? 'bg-rose-600 text-white' : 'bg-emerald-100 text-emerald-900'} font-extrabold">${escapeHtml(primaryApp.status)}</span><br>
+                • <strong>Sanctioned Loan:</strong> ₹${isRej ? 0 : primaryApp.amount} ${!isRej ? `| Paid EMIs: ${primaryApp.emis.length}/${primaryApp.tenure}` : ''}</div>
+                ${isRej ? `<div class="p-2 rounded-lg bg-rose-50 border border-rose-400 text-rose-900 text-[11px] font-semibold">${REJECTION_STANDARD_MESSAGE}</div>` : ''}
+                ${(!isRej && (primaryApp.status === 'Verification' || primaryApp.remarkText || primaryApp.allowReupdate)) ? `<div class="mt-1">${buildChatInteractiveVerificationCenter(primaryApp)}</div>` : ''}
+                ${multiLoanPillsHtml}
+                ${ticketSectionHtml}
+                <div class="pt-1 flex gap-1.5">
+                  <button type="button" onclick="switchCustomerTab('track'); document.getElementById('trackSearchInput').value='${escapeHtml(primaryApp.orderId)}'; searchCustomerApplication();" class="flex-1 py-1.5 px-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-[11px] shadow">📦 Open Tracking Card</button>
+                  ${(!isRej && ['Approved', 'Loan Running'].includes(primaryApp.status)) ? `<button type="button" onclick="askRnsAiChip('Mujhe payment karna hai QR code dikhao')" class="flex-1 py-1.5 px-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-[11px] shadow">📲 Pay EMI (QR)</button>` : ''}
+                </div>
+              `, shouldSpeak);
+              return;
+            }
+
+            if (matchedTickets.length > 0) {
+              appendRnsAiMessage('bot', buildAiTicketStatusCardsHtml(matchedTickets, `🎫 मोबाइल नंबर +91 ${escapeHtml(mob)} के सपोर्ट टिकट्स (${matchedTickets.length}):`), shouldSpeak);
+              return;
+            }
+
+            appendRnsAiMessage('bot', `
+              <div class="font-extrabold text-rose-700">❌ मोबाइल नंबर +91 ${escapeHtml(mob)} पर कोई लोन आवेदन या सपोर्ट टिकट नहीं मिला।</div>
+              <div class="grid grid-cols-2 gap-1.5 pt-1">
+                <button type="button" onclick="startAiChatLoanApplicationWizard()" class="py-1.5 rounded-lg bg-emerald-700 text-white font-extrabold text-[11px]">📝 Apply Loan</button>
+                <button type="button" onclick="startAiSupportTicketFlow()" class="py-1.5 rounded-lg bg-rose-600 text-white font-extrabold text-[11px]">🎫 Raise Ticket</button>
+              </div>
+            `, shouldSpeak);
+            return;
+          }
+
+          // Otherwise run original AI router untouched
+          return await origProcessRnsAiQuery(rawQuery, shouldSpeak);
+        };
+      }
+    })();
+  </script>
+<!-- END OF PART 6C -->
 </body>
 </html>
 <!-- END OF PART 6B -->
